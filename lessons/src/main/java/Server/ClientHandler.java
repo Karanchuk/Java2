@@ -31,7 +31,9 @@ public class ClientHandler {
             new Thread(() -> {
                 try {
                     authentification();
-                    readMessages();
+                    if (!this.socket.isClosed()) {
+                        readMessages();
+                    }
                 } catch (IOException exception) {
                     exception.printStackTrace();
                 } finally {
@@ -46,24 +48,32 @@ public class ClientHandler {
 
     // /auth login pass - хотим отправлять такое сообщение в потоке для авторизации
     private void authentification() throws IOException {
+        long currentTimeMillis = System.currentTimeMillis();
         while (true) {
-            String message = inputStream.readUTF();
-            if (message.startsWith(ChatConstants.AUTH_COMMAND)) {
-                String[] parts = message.split("\\s+"); // разбивает строку по пробелам на массив строк длиной 3
-                String nick = server.getAuthService().getNickByLoginAndPass(parts[1], parts[2]);
-                if (nick != null) { // Проверяем корректность логина + пароля
-                    if (!server.isNickBusy(nick)) { // Проверяем, что в чате нет человека с таким именем
-                        sendMsg(ChatConstants.AUTH_OK + " " + nick);
-                        name = nick;
-                        server.subscribe(this);
-                        server.broadcastMessage(name, name + " вошел в чат");
-                        return;
+            if (inputStream.available() != 0) {
+                currentTimeMillis = System.currentTimeMillis();
+                String message = inputStream.readUTF();
+                if (message.startsWith(ChatConstants.AUTH_COMMAND)) {
+                    String[] parts = message.split("\\s+"); // разбивает строку по пробелам на массив строк длиной 3
+                    String nick = server.getAuthService().getNickByLoginAndPass(parts[1], parts[2]);
+                    if (nick != null) { // Проверяем корректность логина + пароля
+                        if (!server.isNickBusy(nick)) { // Проверяем, что в чате нет человека с таким именем
+                            sendMsg(ChatConstants.AUTH_OK + " " + nick);
+                            name = nick;
+                            server.subscribe(this);
+                            server.broadcastMessage(name, name + " вошел в чат");
+                            return;
+                        } else {
+                            sendMsg("Ник уже используется");
+                        }
                     } else {
-                        sendMsg("Ник уже используется");
+                        sendMsg("Неверные логин/пароль");
                     }
-                } else {
-                    sendMsg("Неверные логин/пароль");
                 }
+            } else if (System.currentTimeMillis() - currentTimeMillis > (long) 15000) {
+                closeStreamAndSocket();
+                System.out.println("Соединение завершено по таймауту");
+                return;
             }
         }
     }
@@ -89,6 +99,10 @@ public class ClientHandler {
     public void closeConnection() {
         server.unsubscribe(this);
         server.broadcastMessage(name, name + " вышел из чата");
+        closeStreamAndSocket();
+    }
+
+    private void closeStreamAndSocket() {
         try {
             inputStream.close();
         } catch (IOException exception) {

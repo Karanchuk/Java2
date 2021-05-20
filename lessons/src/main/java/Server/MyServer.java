@@ -4,8 +4,9 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.stream.IntStream;
+import java.util.stream.Collectors;
 
 /**
  * Непосредственно сервер
@@ -68,30 +69,10 @@ public class MyServer {
 
         String[] parts = message.split("\\s+");
         if (parts[1].equals(ChatConstants.DIRECT) && parts.length > 3) {
-            var ref = new Object() {
-                String cutMessage = parts[0];
-            };
-            IntStream.range(3, parts.length).forEach(i -> {
-                ref.cutMessage += parts[i] + " ";
-            });
-            ClientHandler thisClient = clients.stream().
-                    filter(client -> client.getName().equals(name)).
-                    findFirst().orElse(null);
-            ClientHandler foundClient = clients.stream().
-                    filter(client -> client.getName().equals(parts[2]) && name != parts[2]).
-                    findFirst().
-                    orElse(null);
-            if (foundClient == null) {
-                thisClient.sendMsg("Ошибка. Пользователь " + parts[2] + " не авторизован");
-            } else {
-                thisClient.sendMsg(ref.cutMessage);
-                foundClient.sendMsg(ref.cutMessage);
-            }
+            String newMessage = parts[0] + " " + Arrays.stream(parts).skip(3).collect(Collectors.joining(" "));
+            clients.stream().filter(c -> c.getName().equals(name) || c.getName().equals(parts[2])).forEach(c -> c.sendMsg(newMessage));
         } else {
             clients.forEach(client -> client.sendMsg(message));
         }
-        /*for (ClientHandler client : clients) {
-            client.sendMsg(message);
-        }*/
     }
 }
